@@ -1,0 +1,123 @@
+.equ KEY_BASE, 0xFF200050
+.equ HEX3_HEX0_BASE, 0xFF200020
+.equ HEX5_HEX4_BASE, 0xFF200030
+.equ TIMER_BASE, 0xFF202000
+.equ KEY1, 0b0010
+ 
+.text
+.global _start
+_start:
+ 
+movi r10, 0 # hundredth counter
+movi r11, 0 # sec counter
+movi r12, 0 # min counter
+movi r20, 99 # for seconds condition
+movi r21, 59 # for mins condition
+movia r8, TIMER_BASE
+movia r9, HEX3_HEX0_BASE
+movia r19, HEX5_HEX4_BASE
+movia r18, KEY_BASE
+
+#check transition for push button
+LOOP1: ldwio r4, (r18)
+beq r4, zero, LOOP1
+WAIT: ldwio r3, (r18)
+    bne r3, zero, WAIT
+
+ 
+#set interval period
+movia r7, 1000000
+sthio r7, 8(r8) # store half word to i/o
+srli r7, r7, 16
+sthio r7, 12(r8)
+ 
+#start timer
+movi r2, 0b0110
+sthio r2, 4(r8)
+ 
+LOOP:
+ldwio r3, (r18)
+bne r3, r0, STOP_TIMER
+beq r10, r20, SEC_INCREMENT
+beq r11, r21, MIN_INCREMENT
+movi r14, 0 # clear register for left OR
+movi r17, 0 # clear register for right OR
+mov r4, r10 # copy counter value for function call
+call DIVIDE
+mov r4, r2
+call SEG7_CODE
+or r14, r14, r2
+mov r4, r3
+call SEG7_CODE
+slli r2, r2, 8
+or r14, r14, r2
+mov r4, r11 # copy counter value of seconds for function call
+call DIVIDE
+mov r4, r2
+call SEG7_CODE
+slli r2, r2, 16
+or r14, r14, r2
+mov r4, r3
+call SEG7_CODE
+slli r2, r2, 24
+or r14, r14, r2
+mov r4, r12 # copy counter value of minutes for function call
+call DIVIDE
+mov r4, r2
+call SEG7_CODE
+or r17, r17, r2
+mov r4, r3
+call SEG7_CODE
+slli r2, r2, 8
+or r17, r17, r2
+stwio r14, (r9)
+stwio r17, (r19)
+addi r10, r10, 1 # counter incremented
+call DELAY
+br LOOP
+ 
+SEC_INCREMENT:
+addi r11, r11, 1
+movi r10, 0
+JMPI LOOP
+
+MIN_INCREMENT:
+addi r12, r12, 1
+movi r11, 0
+movi r10, 0
+JMPI LOOP
+ 
+ 
+ 
+DELAY:
+ldwio r3, (r8)
+andi r3, r3, 1
+beq r3, r0, DELAY
+stwio r0, (r8) # reseting
+ret
+ 
+SEG7_CODE:
+movia r15, BIT_CODES
+add r15, r15, r4
+ldb r2, (r15)
+ret
+
+STOP_TIMER:
+movi r2, 0b1000
+sthio r2, 4(r8)
+JMPI LOOP1
+
+ 
+DIVIDE: mov r2, r4 # r2 will be the remainder
+movi r5, 10
+movi r3, 0 # quotient
+CONT: blt r2, r5, DIV_END
+sub r2, r2, r5
+addi r3, r3, 1
+br CONT
+DIV_END: ret
+ 
+#data
+BIT_CODES: .byte 0b00111111, 0b00000110, 0b01011011, 0b01001111, 0b01100110
+ .byte 0b01101101, 0b01111101, 0b00000111, 0b01111111, 0b01100111
+.skip 2
